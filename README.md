@@ -41,7 +41,55 @@ A movie discovery web application that demonstrates building and running Docker 
 
 ---
 
+## 📖 How to Use This Guide
+
+**This README provides educational guidance without showing full commands.** Your task is to research and construct the actual Docker commands based on the descriptions provided. All complete command examples are available in [README_FULL.md](README_FULL.md) if you need to verify your work or get unstuck.
+
+This approach encourages hands-on learning and helps you understand what each Docker command does, rather than just copying and pasting.
+
+---
+
 ## Getting the Repository
+
+### Using Git (recommended)
+
+If you have Git installed:
+
+```bash
+git clone https://github.com/GeertCoulommier/cinesearch.git
+cd cinesearch
+```
+
+### Using Windows Package Manager (winget) + ZIP Download
+
+On Windows, you can use winget to install `curl` and `unzip`, then download the repository as a ZIP file:
+
+1. **Install curl and unzip** (if not already installed):
+   ```bash
+   winget install -q curl
+   winget install -q GnuWin32.UnZip
+   ```
+
+2. **Download the repository as a ZIP file**:
+   ```bash
+   curl -L https://github.com/GeertCoulommier/cinesearch/archive/refs/heads/main.zip -o cinesearch.zip
+   ```
+
+3. **Extract the ZIP file**:
+   ```bash
+   unzip -q cinesearch.zip
+   cd cinesearch-main
+   ```
+
+### On macOS or Linux without Git
+
+You can use `curl` and `unzip` (usually pre-installed):
+
+```bash
+curl -L https://github.com/GeertCoulommier/cinesearch/archive/refs/heads/main.zip -o cinesearch.zip
+unzip -q cinesearch.zip
+cd cinesearch-main
+```
 
 ### Option 1 – Git Clone (recommended)
 
@@ -89,13 +137,25 @@ The static files and Nginx configuration should be baked into the image at build
 
 ### Step 5 – Start the backend container
 
-Run the backend container with:
-- Detached mode (background)
-- A container name
-- Network attachment with an alias (so Nginx can resolve it by name)
-- Restart policy (auto-restart after crash)
-- Environment variables for the API key, port, and Node.js mode
-- The backend should NOT expose a port to the host (only Nginx should)
+Run the backend container. For reference, use the suggested container name `cinesearch-backend` and the image you built in Step 3. The following is already configured and provided — you only need to add the container name and image:
+
+Pre-configured network and environment settings:
+```
+--network cinesearch-net \
+--network-alias backend \
+--restart unless-stopped \
+-e TMDB_API_KEY=$(grep TMDB_API_KEY .env | cut -d= -f2) \
+-e PORT=3000 \
+-e NODE_ENV=production \
+```
+
+**Your task:** Construct a `docker run` command that combines:
+- Detached mode (`-d` flag)
+- The container name: `cinesearch-backend`
+- The pre-configured settings above
+- The image name from Step 3
+
+Consult [README_FULL.md](README_FULL.md) for a complete example if needed.
 
 ### Step 6 – Start the frontend container
 
