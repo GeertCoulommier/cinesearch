@@ -1,0 +1,33 @@
+services:
+  # ── Backend: Node.js API proxy with rate limiting & caching ──
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cinesearch-backend
+    restart: unless-stopped
+    environment:
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - PORT=3000
+      - NODE_ENV=production
+    networks:
+      - app-network
+    # Not exposed externally – Nginx proxies to it
+
+  # ── Frontend: Nginx serving static files + reverse proxy ──
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cinesearch-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
