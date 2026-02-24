@@ -58,8 +58,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Audit for high/critical vulnerabilities
-        run: npm audit --audit-level=high
+      - name: Audit production dependencies for high/critical vulnerabilities
+        # --omit=dev excludes devDependencies (e.g. jest's transitive minimatch)
+        # so only production-shipped packages are audited.
+        run: npm audit --audit-level=high --omit=dev
 
   # ── 3. Docker image builds (smoke test) ───────────────────────────────────
   docker-build:

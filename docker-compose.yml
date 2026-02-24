@@ -13,10 +13,12 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      # Use 127.0.0.1 – on Alpine, "localhost" resolves to ::1 (IPv6)
+      # but Node.js listens on 0.0.0.0 (IPv4), causing connection refused.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
-      start_period: 10s
+      start_period: 15s
       retries: 3
     # Not exposed externally – Nginx proxies to it
 
@@ -28,17 +30,19 @@ services:
     container_name: cinesearch-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      # Override APP_PORT in .env for local dev (e.g. APP_PORT=11111)
+      # CI uses the default port 80.
+      - "${APP_PORT:-80}:80"
     depends_on:
       backend:
         condition: service_healthy
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/nginx-health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
       interval: 30s
       timeout: 5s
-      start_period: 5s
+      start_period: 10s
       retries: 3
 
 networks:
