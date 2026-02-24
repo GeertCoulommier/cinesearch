@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── 1. Backend: lint-free install + unit tests + coverage ─────────────────
+  backend-test:
+    name: Backend – Test & Coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        env:
+          TMDB_API_KEY: test-key-ci
+        run: npm run test:coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage/
+
+  # ── 2. Dependency security audit ──────────────────────────────────────────
+  audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit for high/critical vulnerabilities
+        run: npm audit --audit-level=high
+
+  # ── 3. Docker image builds (smoke test) ───────────────────────────────────
+  docker-build:
+    name: Docker – Build Images
+    runs-on: ubuntu-latest
+    needs: backend-test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          tags: cinesearch-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          tags: cinesearch-frontend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 4. Container integration smoke test ───────────────────────────────────
+  integration-smoke:
+    name: Integration Smoke Test
+    runs-on: ubuntu-latest
+    needs: docker-build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write .env
+        run: echo "TMDB_API_KEY=smoke-test-dummy-key" > .env
+
+      - name: Start stack
+        run: docker compose up -d --build
+
+      - name: Wait for backend to be healthy
+        run: |
+          for i in $(seq 1 24); do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' cinesearch-backend 2>/dev/null || echo "missing")
+            echo "Attempt $i: backend=$STATUS"
+            [ "$STATUS" = "healthy" ] && break
+            sleep 5
+          done
+          [ "$STATUS" = "healthy" ] || { docker compose logs; exit 1; }
+
+      - name: Wait for frontend to be healthy
+        run: |
+          for i in $(seq 1 20); do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' cinesearch-frontend 2>/dev/null || echo "missing")
+            echo "Attempt $i: frontend=$STATUS"
+            [ "$STATUS" = "healthy" ] && break
+            sleep 5
+          done
+          [ "$STATUS" = "healthy" ] || { docker compose logs; exit 1; }
+
+      - name: Verify /api/health responds correctly
+        run: curl -sf http://localhost/api/health | grep '"status":"ok"'
+
+      - name: Verify /api/genres endpoint responds
+        run: curl -sf -o /dev/null -w "%{http_code}" http://localhost/api/genres | grep -qE "^(200|502)$"
+
+      - name: Verify frontend serves HTML
+        run: curl -sf http://localhost/ | grep -i "cinesearch"
+
+      - name: Tear down
+        if: always()
+        run: docker compose down --rmi all --volumes

@@ -55,8 +55,14 @@ const rateLimiter = rateLimit({
     },
 });
 
-app.use("/api/", speedLimiter);
-app.use("/api/", rateLimiter);
+// Only apply rate/speed limiters outside of the test environment
+if (process.env.NODE_ENV !== "test") {
+    app.use("/api/", speedLimiter);
+    app.use("/api/", rateLimiter);
+}
+
+// Trust proxy (needed for rate limiter to read real client IP behind Nginx)
+app.set("trust proxy", 1);
 
 // ---------------------------------------------------------------------------
 // Cache – avoids redundant calls to TMDB for identical queries
@@ -91,39 +97,155 @@ async function tmdbFetch(path, params = {}) {
 // Routes
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Routes
+// ---------------------------------------------------------------------------
+
 // Health check
 app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Search movies by title
-app.get("/api/search", async (req, res) => {
+/**
+ * GET /api/genres
+ * Returns the full TMDB genre list (cached).
+ */
+app.get("/api/genres", async (_req, res) => {
     try {
-        const { query, page = 1 } = req.query;
-        if (!query || query.trim().length === 0) {
-            return res.status(400).json({ error: "query parameter is required." });
-        }
-
-        const data = await tmdbFetch("/search/movie", {
-            query: query.trim(),
-            page: Number(page),
-            include_adult: false,
-        });
-
+        const data = await tmdbFetch("/genre/movie/list", { language: "en" });
         res.json(data);
     } catch (err) {
-        console.error("Search error:", err.message);
-        res.status(err.response?.status || 500).json({
-            error: "Failed to fetch search results.",
-        });
+        console.error("Genre fetch error:", err.message);
+        res.status(502).json({ error: "Failed to fetch genres from TMDB." });
     }
 });
 
-// Get full movie details (with credits, videos, recommendations, etc.)
+/**
+ * GET /api/search
+ *
+ * At least one of: query, year, genre, cast, director must be provided.
+ *   query    – movie title keyword(s)
+ *   year     – primary release year (YYYY)
+ *   genre    – TMDB genre ID (numeric)
+ *   cast     – actor name (resolved to TMDB person ID)
+ *   director – director name (resolved to TMDB person ID)
+ *   page     – results page (default 1)
+ */
+app.get("/api/search", async (req, res) => {
+    try {
+        const { query, year, genre, cast, director, page = "1" } = req.query;
+
+        // At least one search parameter required
+        if (!query && !year && !genre && !cast && !director) {
+            return res.status(400).json({
+                error: "Provide at least one search parameter: query, year, genre, cast, or director.",
+            });
+        }
+
+        // Validate year
+        if (year !== undefined) {
+            const y = Number(year);
+            if (!Number.isInteger(y) || y < 1880 || y > new Date().getFullYear() + 5) {
+                return res.status(400).json({ error: "Invalid year." });
+            }
+        }
+
+        // Validate page
+        const pageNum = Number(page);
+        if (!Number.isInteger(pageNum) || pageNum < 1 || pageNum > 500) {
+            return res.status(400).json({ error: "page must be an integer between 1 and 500." });
+        }
+
+        // Validate genre
+        if (genre !== undefined && !/^\d+$/.test(genre)) {
+            return res.status(400).json({ error: "genre must be a numeric TMDB genre ID." });
+        }
+
+        // Resolve cast person ID
+        let castId;
+        if (cast) {
+            const castTrimmed = cast.trim();
+            if (castTrimmed.length > 100) {
+                return res.status(400).json({ error: "cast parameter too long." });
+            }
+            const personSearch = await tmdbFetch("/search/person", {
+                query: castTrimmed,
+                include_adult: false,
+            });
+            if (!personSearch.results || personSearch.results.length === 0) {
+                return res.json({ results: [], total_results: 0, total_pages: 0, page: pageNum });
+            }
+            castId = personSearch.results[0].id;
+        }
+
+        // Resolve director person ID
+        let directorId;
+        if (director) {
+            const dirTrimmed = director.trim();
+            if (dirTrimmed.length > 100) {
+                return res.status(400).json({ error: "director parameter too long." });
+            }
+            const personSearch = await tmdbFetch("/search/person", {
+                query: dirTrimmed,
+                include_adult: false,
+            });
+            if (!personSearch.results || personSearch.results.length === 0) {
+                return res.json({ results: [], total_results: 0, total_pages: 0, page: pageNum });
+            }
+            directorId = personSearch.results[0].id;
+        }
+
+        // Choose: /search/movie (title-only) vs /discover/movie (any filter)
+        let data;
+        const useDiscover = !!(genre || castId || directorId || (year && !query));
+
+        if (!useDiscover) {
+            // Simple title search with optional year
+            const params = { query: query.trim(), page: pageNum, include_adult: false };
+            if (year) params.primary_release_year = year;
+            data = await tmdbFetch("/search/movie", params);
+        } else {
+            // Discover for genre / cast / director (+ optional keyword)
+            const params = {
+                page: pageNum,
+                include_adult: false,
+                sort_by: "popularity.desc",
+            };
+            if (query)     params.with_keywords = query.trim();
+            if (year)      params.primary_release_year = year;
+            if (genre)     params.with_genres = genre;
+            if (castId)    params.with_cast = String(castId);
+            if (directorId) params.with_crew = String(directorId);
+            data = await tmdbFetch("/discover/movie", params);
+
+            // Fallback: if discover returns nothing and we have a title query, try /search/movie
+            if (query && (!data.results || data.results.length === 0)) {
+                const fbParams = { query: query.trim(), page: pageNum, include_adult: false };
+                if (year) fbParams.primary_release_year = year;
+                data = await tmdbFetch("/search/movie", fbParams);
+            }
+        }
+
+        res.json({
+            results: data.results || [],
+            total_results: data.total_results || 0,
+            total_pages: data.total_pages || 0,
+            page: pageNum,
+        });
+    } catch (err) {
+        console.error("Search error:", err.message);
+        res.status(502).json({ error: "Failed to fetch search results from TMDB." });
+    }
+});
+
+/**
+ * GET /api/movie/:id
+ * Full movie details including credits, videos, images, recommendations, reviews.
+ */
 app.get("/api/movie/:id", async (req, res) => {
     try {
         const movieId = Number(req.params.id);
-        if (!movieId || isNaN(movieId)) {
+        if (!Number.isInteger(movieId) || movieId <= 0) {
             return res.status(400).json({ error: "Invalid movie ID." });
         }
 
@@ -134,28 +256,34 @@ app.get("/api/movie/:id", async (req, res) => {
         res.json(data);
     } catch (err) {
         console.error("Movie detail error:", err.message);
-        res.status(err.response?.status || 500).json({
-            error: "Failed to fetch movie details.",
-        });
+        const status = err.response?.status;
+        if (status === 404) return res.status(404).json({ error: "Movie not found." });
+        res.status(502).json({ error: "Failed to fetch movie details from TMDB." });
     }
 });
 
-// Get trending movies (for the landing page)
+/**
+ * GET /api/trending
+ * Trending movies this week.
+ */
 app.get("/api/trending", async (_req, res) => {
     try {
         const data = await tmdbFetch("/trending/movie/week");
         res.json(data);
     } catch (err) {
         console.error("Trending error:", err.message);
-        res.status(err.response?.status || 500).json({
-            error: "Failed to fetch trending movies.",
-        });
+        res.status(502).json({ error: "Failed to fetch trending movies." });
     }
 });
 
 // ---------------------------------------------------------------------------
-// Start server
+// Start server (skipped when imported by tests)
 // ---------------------------------------------------------------------------
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Backend listening on http://0.0.0.0:${PORT}`);
-});
+/* istanbul ignore next */
+if (require.main === module) {
+    app.listen(PORT, "0.0.0.0", () => {
+        console.log(`CineSearch backend listening on http://0.0.0.0:${PORT}`);
+    });
+}
+
+module.exports = { app, cache };

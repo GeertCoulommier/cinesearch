@@ -7,6 +7,19 @@ A movie discovery web application that demonstrates building and running Docker 
 > Nginx configuration, and frontend JavaScript — is **not** intended as a reference implementation or
 > production-ready example. Do not use it as a template for real-world projects without thorough review.
 
+## Features
+
+- **Multi-field search** – find movies by any combination of:
+  - **Title** – keyword search across movie titles
+  - **Year** – filter by exact release year (e.g. `2010`)
+  - **Genre** – pick from a live TMDB genre dropdown
+  - **Cast** – actor name resolved to TMDB person ID
+  - **Director** – director name resolved to TMDB person ID
+- **Rich movie detail** – poster, genres, director, full cast, trailer, gallery, reviews, recommendations
+- **Rate limiting** – 40 req/min per IP + progressive slowdown after 30 req/min
+- **In-memory caching** – identical queries served from cache for 10 minutes
+- **CI/CD pipeline** – GitHub Actions: tests → audit → Docker builds → container smoke test
+
 ## Architecture
 
 ```
@@ -23,6 +36,28 @@ A movie discovery web application that demonstrates building and running Docker 
   - **Nginx rate limiting** – additional 10 req/s limit at the reverse proxy layer
   - **In‑memory caching** – identical queries served from cache for 10 minutes
   - **Debounced search** – frontend waits 400 ms after typing stops before querying
+
+## Search API Reference
+
+`GET /api/search` – all parameters are optional, but **at least one** must be provided.
+
+| Parameter  | Type   | Description                                | Example              |
+|------------|--------|--------------------------------------------|----------------------|
+| `query`    | string | Movie title keyword(s)                     | `Inception`          |
+| `year`     | number | Primary release year (1880–present+5)      | `2010`               |
+| `genre`    | number | TMDB genre ID (see `/api/genres`)          | `28` (Action)        |
+| `cast`     | string | Actor name – resolved to TMDB person ID    | `Leonardo DiCaprio`  |
+| `director` | string | Director name – resolved to TMDB person ID | `Christopher Nolan`  |
+| `page`     | number | Results page, 1–500 (default `1`)          | `2`                  |
+
+Other endpoints:
+
+| Endpoint              | Description                              |
+|-----------------------|------------------------------------------|
+| `GET /api/genres`     | Full TMDB genre list (cached)            |
+| `GET /api/movie/:id`  | Full details, credits, trailers, reviews |
+| `GET /api/trending`   | Trending movies this week                |
+| `GET /api/health`     | Health check                             |
 
 ## Prerequisites
 

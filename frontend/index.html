@@ -37,6 +37,41 @@
 
     <!-- ===== MAIN CONTENT ===== -->
     <main class="main">
+
+        <!-- Advanced Search Panel -->
+        <section id="searchPanel" class="search-panel">
+            <form id="filterForm" class="filter-form" novalidate>
+                <div class="filter-row">
+                    <div class="filter-field">
+                        <label class="filter-label" for="yearInput">Year</label>
+                        <input id="yearInput" type="number" class="filter-input" placeholder="e.g. 2010"
+                            min="1880" max="2030" step="1" />
+                    </div>
+                    <div class="filter-field filter-field--genre">
+                        <label class="filter-label" for="genreSelect">Genre</label>
+                        <select id="genreSelect" class="filter-input filter-select">
+                            <option value="">Any genre</option>
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label class="filter-label" for="castInput">Cast</label>
+                        <input id="castInput" type="search" class="filter-input"
+                            placeholder="e.g. Leonardo DiCaprio" autocomplete="off" maxlength="100" />
+                    </div>
+                    <div class="filter-field">
+                        <label class="filter-label" for="directorInput">Director</label>
+                        <input id="directorInput" type="search" class="filter-input"
+                            placeholder="e.g. Christopher Nolan" autocomplete="off" maxlength="100" />
+                    </div>
+                    <div class="filter-field filter-field--actions">
+                        <button type="submit" class="btn btn--primary btn--sm">Search</button>
+                        <button type="button" id="filterClearBtn" class="btn btn--ghost btn--sm">Clear</button>
+                    </div>
+                </div>
+            </form>
+            <div id="activeFilters" class="active-filters" hidden></div>
+        </section>
+
         <!-- Landing / Trending -->
         <section id="trendingSection" class="section">
             <h2 class="section__title">🔥 Trending This Week</h2>

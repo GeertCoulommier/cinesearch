@@ -12,6 +12,12 @@ services:
       - NODE_ENV=production
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     # Not exposed externally – Nginx proxies to it
 
   # ── Frontend: Nginx serving static files + reverse proxy ──
@@ -24,9 +30,16 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
 
 networks:
   app-network:

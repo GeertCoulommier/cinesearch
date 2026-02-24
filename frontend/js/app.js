@@ -18,6 +18,7 @@
         totalPages: 1,
         results: [],
         previousView: "trending", // "trending" | "results"
+        filters: { year: "", genre: "", cast: "", director: "" },
     };
 
     // -----------------------------------------------------------------------
@@ -38,6 +39,14 @@
     const detailContent = $("#detailContent");
     const backBtn = $("#backBtn");
     const errorToast = $("#errorToast");
+    // Advanced filter controls
+    const filterForm      = $("#filterForm");
+    const yearInput       = $("#yearInput");
+    const genreSelect     = $("#genreSelect");
+    const castInput       = $("#castInput");
+    const directorInput   = $("#directorInput");
+    const filterClearBtn  = $("#filterClearBtn");
+    const activeFilters   = $("#activeFilters");
 
     // -----------------------------------------------------------------------
     // Utility helpers
@@ -173,15 +182,28 @@
         }
     }
 
-    /** Search for movies */
+    /** Search for movies using title + optional filter params */
     async function performSearch(query, page = 1, append = false) {
-        if (query.length < MIN_QUERY_LENGTH) return;
+        const hasQuery   = query && query.length >= MIN_QUERY_LENGTH;
+        const hasFilters = Object.values(state.filters).some(Boolean);
+
+        if (!hasQuery && !hasFilters) return;
 
         searchSpinner.hidden = false;
         trendingSection.hidden = true;
         resultsSection.hidden = false;
         detailSection.hidden = true;
-        resultsTitle.textContent = `Results for "${query}"`;
+
+        const titleLabel = hasQuery ? `"${query}"` : null;
+        const filterParts = [];
+        if (state.filters.cast)     filterParts.push(`starring ${state.filters.cast}`);
+        if (state.filters.director) filterParts.push(`dir. ${state.filters.director}`);
+        if (state.filters.year)     filterParts.push(state.filters.year);
+        if (state.filters.genre && genreSelect) {
+            const opt = genreSelect.options[genreSelect.selectedIndex];
+            if (opt && opt.value) filterParts.push(opt.text);
+        }
+        resultsTitle.textContent = [titleLabel, ...filterParts].filter(Boolean).join(" · ") || "Search Results";
 
         if (!append) {
             renderSkeletons(resultsGrid, 12);
@@ -189,15 +211,22 @@
         }
 
         try {
-            const data = await apiFetch("/search", { query, page });
-            state.page = data.page;
+            const params = { page };
+            if (hasQuery) params.query = query;
+            if (state.filters.year)     params.year     = state.filters.year;
+            if (state.filters.genre)    params.genre    = state.filters.genre;
+            if (state.filters.cast)     params.cast     = state.filters.cast;
+            if (state.filters.director) params.director = state.filters.director;
+
+            const data = await apiFetch("/search", params);
+            state.page       = data.page;
             state.totalPages = data.total_pages;
-            state.query = query;
+            state.query      = query;
 
             if (!append) resultsGrid.innerHTML = "";
 
             if (data.results.length === 0 && page === 1) {
-                resultsGrid.innerHTML = `<p style="color:var(--clr-text-muted);grid-column:1/-1;">No movies found for "<em>${esc(query)}</em>". Try another title.</p>`;
+                resultsGrid.innerHTML = `<p style="color:var(--clr-text-muted);grid-column:1/-1;">No movies found. Try different search terms.</p>`;
             }
 
             data.results.forEach((m) => {
@@ -206,11 +235,52 @@
             });
 
             loadMoreWrap.hidden = state.page >= state.totalPages;
+            renderFilterChips();
         } catch (err) {
             showError(err.message || "Search failed.");
             if (!append) resultsGrid.innerHTML = "";
         } finally {
             searchSpinner.hidden = true;
+        }
+    }
+
+    /** Populate the genre <select> from the /api/genres endpoint */
+    async function loadGenres() {
+        try {
+            const data = await apiFetch("/genres");
+            if (!data.genres) return;
+            data.genres.forEach((g) => {
+                const opt = document.createElement("option");
+                opt.value = g.id;
+                opt.textContent = g.name;
+                genreSelect.appendChild(opt);
+            });
+        } catch {
+            // Non-fatal – genre dropdown stays with just "Any genre"
+        }
+    }
+
+    /** Render active filter chips */
+    function renderFilterChips() {
+        if (!activeFilters) return;
+        const query = searchInput.value.trim();
+        const chips = [];
+        if (query)                  chips.push(`Title: "${query}"`);
+        if (state.filters.year)     chips.push(`Year: ${state.filters.year}`);
+        if (state.filters.genre && genreSelect) {
+            const opt = genreSelect.options[genreSelect.selectedIndex];
+            if (opt && opt.value) chips.push(`Genre: ${opt.text}`);
+        }
+        if (state.filters.cast)     chips.push(`Cast: ${state.filters.cast}`);
+        if (state.filters.director) chips.push(`Director: ${state.filters.director}`);
+
+        if (chips.length) {
+            activeFilters.innerHTML = chips
+                .map((c) => `<span class="filter-chip">${esc(c)}</span>`)
+                .join("");
+            activeFilters.hidden = false;
+        } else {
+            activeFilters.hidden = true;
         }
     }
 
@@ -377,9 +447,10 @@
     // Debounced search on input
     const debouncedSearch = debounce((value) => {
         const q = value.trim();
-        if (q.length >= MIN_QUERY_LENGTH) {
+        const hasFilters = Object.values(state.filters).some(Boolean);
+        if (q.length >= MIN_QUERY_LENGTH || hasFilters) {
             performSearch(q);
-        } else if (q.length === 0) {
+        } else if (q.length === 0 && !hasFilters) {
             showTrending();
         }
     }, DEBOUNCE_MS);
@@ -390,13 +461,18 @@
         debouncedSearch(val);
     });
 
-    // Clear button
+    // Clear button (title only – keeps filters intact)
     clearBtn.addEventListener("click", () => {
         searchInput.value = "";
         clearBtn.hidden = true;
         state.query = "";
         state.page = 1;
-        showTrending();
+        const hasFilters = Object.values(state.filters).some(Boolean);
+        if (hasFilters) {
+            performSearch("", 1, false);
+        } else {
+            showTrending();
+        }
         searchInput.focus();
     });
 
@@ -410,7 +486,8 @@
     // Back button
     backBtn.addEventListener("click", () => {
         detailSection.hidden = true;
-        if (state.previousView === "results" && state.query) {
+        const hasFilters = Object.values(state.filters).some(Boolean);
+        if (state.previousView === "results" && (state.query || hasFilters)) {
             resultsSection.hidden = false;
         } else {
             showTrending();
@@ -424,11 +501,53 @@
         clearBtn.hidden = true;
         state.query = "";
         state.page = 1;
+        state.filters = { year: "", genre: "", cast: "", director: "" };
+        if (yearInput)      yearInput.value    = "";
+        if (genreSelect)    genreSelect.value  = "";
+        if (castInput)      castInput.value    = "";
+        if (directorInput)  directorInput.value = "";
+        if (activeFilters)  activeFilters.hidden = true;
         showTrending();
     });
+
+    // Advanced filter form submit
+    if (filterForm) {
+        filterForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            state.filters = {
+                year:     yearInput?.value.trim()     || "",
+                genre:    genreSelect?.value          || "",
+                cast:     castInput?.value.trim()     || "",
+                director: directorInput?.value.trim() || "",
+            };
+            state.page = 1;
+            performSearch(searchInput.value.trim(), 1, false);
+        });
+    }
+
+    // Advanced filter clear
+    if (filterClearBtn) {
+        filterClearBtn.addEventListener("click", () => {
+            state.filters = { year: "", genre: "", cast: "", director: "" };
+            if (yearInput)      yearInput.value    = "";
+            if (genreSelect)    genreSelect.value  = "";
+            if (castInput)      castInput.value    = "";
+            if (directorInput)  directorInput.value = "";
+            if (activeFilters)  activeFilters.hidden = true;
+            // If there's still a title query, re-run without filters; else show trending
+            const q = searchInput.value.trim();
+            if (q.length >= MIN_QUERY_LENGTH) {
+                state.page = 1;
+                performSearch(q, 1, false);
+            } else {
+                showTrending();
+            }
+        });
+    }
 
     // -----------------------------------------------------------------------
     // Init
     // -----------------------------------------------------------------------
+    loadGenres();
     showTrending();
 })();
