@@ -314,7 +314,7 @@ describe("GET /api/search – combined fields", () => {
     });
 
     it("cast + director resolves both person IDs", async () => {
-        const actorResult  = { results: [{ id: 100, name: "Actor A" }] };
+        const actorResult = { results: [{ id: 100, name: "Actor A" }] };
         const directorResult = { results: [{ id: 200, name: "Director B" }] };
 
         // First person search → cast, second → director

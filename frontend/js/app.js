@@ -40,13 +40,13 @@
     const backBtn = $("#backBtn");
     const errorToast = $("#errorToast");
     // Advanced filter controls
-    const filterForm      = $("#filterForm");
-    const yearInput       = $("#yearInput");
-    const genreSelect     = $("#genreSelect");
-    const castInput       = $("#castInput");
-    const directorInput   = $("#directorInput");
-    const filterClearBtn  = $("#filterClearBtn");
-    const activeFilters   = $("#activeFilters");
+    const filterForm = $("#filterForm");
+    const yearInput = $("#yearInput");
+    const genreSelect = $("#genreSelect");
+    const castInput = $("#castInput");
+    const directorInput = $("#directorInput");
+    const filterClearBtn = $("#filterClearBtn");
+    const activeFilters = $("#activeFilters");
 
     // -----------------------------------------------------------------------
     // Utility helpers
@@ -184,7 +184,7 @@
 
     /** Search for movies using title + optional filter params */
     async function performSearch(query, page = 1, append = false) {
-        const hasQuery   = query && query.length >= MIN_QUERY_LENGTH;
+        const hasQuery = query && query.length >= MIN_QUERY_LENGTH;
         const hasFilters = Object.values(state.filters).some(Boolean);
 
         if (!hasQuery && !hasFilters) return;
@@ -196,9 +196,9 @@
 
         const titleLabel = hasQuery ? `"${query}"` : null;
         const filterParts = [];
-        if (state.filters.cast)     filterParts.push(`starring ${state.filters.cast}`);
+        if (state.filters.cast) filterParts.push(`starring ${state.filters.cast}`);
         if (state.filters.director) filterParts.push(`dir. ${state.filters.director}`);
-        if (state.filters.year)     filterParts.push(state.filters.year);
+        if (state.filters.year) filterParts.push(state.filters.year);
         if (state.filters.genre && genreSelect) {
             const opt = genreSelect.options[genreSelect.selectedIndex];
             if (opt && opt.value) filterParts.push(opt.text);
@@ -213,15 +213,15 @@
         try {
             const params = { page };
             if (hasQuery) params.query = query;
-            if (state.filters.year)     params.year     = state.filters.year;
-            if (state.filters.genre)    params.genre    = state.filters.genre;
-            if (state.filters.cast)     params.cast     = state.filters.cast;
+            if (state.filters.year) params.year = state.filters.year;
+            if (state.filters.genre) params.genre = state.filters.genre;
+            if (state.filters.cast) params.cast = state.filters.cast;
             if (state.filters.director) params.director = state.filters.director;
 
             const data = await apiFetch("/search", params);
-            state.page       = data.page;
+            state.page = data.page;
             state.totalPages = data.total_pages;
-            state.query      = query;
+            state.query = query;
 
             if (!append) resultsGrid.innerHTML = "";
 
@@ -265,13 +265,13 @@
         if (!activeFilters) return;
         const query = searchInput.value.trim();
         const chips = [];
-        if (query)                  chips.push(`Title: "${query}"`);
-        if (state.filters.year)     chips.push(`Year: ${state.filters.year}`);
+        if (query) chips.push(`Title: "${query}"`);
+        if (state.filters.year) chips.push(`Year: ${state.filters.year}`);
         if (state.filters.genre && genreSelect) {
             const opt = genreSelect.options[genreSelect.selectedIndex];
             if (opt && opt.value) chips.push(`Genre: ${opt.text}`);
         }
-        if (state.filters.cast)     chips.push(`Cast: ${state.filters.cast}`);
+        if (state.filters.cast) chips.push(`Cast: ${state.filters.cast}`);
         if (state.filters.director) chips.push(`Director: ${state.filters.director}`);
 
         if (chips.length) {
@@ -502,11 +502,11 @@
         state.query = "";
         state.page = 1;
         state.filters = { year: "", genre: "", cast: "", director: "" };
-        if (yearInput)      yearInput.value    = "";
-        if (genreSelect)    genreSelect.value  = "";
-        if (castInput)      castInput.value    = "";
-        if (directorInput)  directorInput.value = "";
-        if (activeFilters)  activeFilters.hidden = true;
+        if (yearInput) yearInput.value = "";
+        if (genreSelect) genreSelect.value = "";
+        if (castInput) castInput.value = "";
+        if (directorInput) directorInput.value = "";
+        if (activeFilters) activeFilters.hidden = true;
         showTrending();
     });
 
@@ -515,9 +515,9 @@
         filterForm.addEventListener("submit", (e) => {
             e.preventDefault();
             state.filters = {
-                year:     yearInput?.value.trim()     || "",
-                genre:    genreSelect?.value          || "",
-                cast:     castInput?.value.trim()     || "",
+                year: yearInput?.value.trim() || "",
+                genre: genreSelect?.value || "",
+                cast: castInput?.value.trim() || "",
                 director: directorInput?.value.trim() || "",
             };
             state.page = 1;
@@ -529,11 +529,11 @@
     if (filterClearBtn) {
         filterClearBtn.addEventListener("click", () => {
             state.filters = { year: "", genre: "", cast: "", director: "" };
-            if (yearInput)      yearInput.value    = "";
-            if (genreSelect)    genreSelect.value  = "";
-            if (castInput)      castInput.value    = "";
-            if (directorInput)  directorInput.value = "";
-            if (activeFilters)  activeFilters.hidden = true;
+            if (yearInput) yearInput.value = "";
+            if (genreSelect) genreSelect.value = "";
+            if (castInput) castInput.value = "";
+            if (directorInput) directorInput.value = "";
+            if (activeFilters) activeFilters.hidden = true;
             // If there's still a title query, re-run without filters; else show trending
             const q = searchInput.value.trim();
             if (q.length >= MIN_QUERY_LENGTH) {

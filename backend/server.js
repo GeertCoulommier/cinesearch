@@ -211,10 +211,10 @@ app.get("/api/search", async (req, res) => {
                 include_adult: false,
                 sort_by: "popularity.desc",
             };
-            if (query)     params.with_keywords = query.trim();
-            if (year)      params.primary_release_year = year;
-            if (genre)     params.with_genres = genre;
-            if (castId)    params.with_cast = String(castId);
+            if (query) params.with_keywords = query.trim();
+            if (year) params.primary_release_year = year;
+            if (genre) params.with_genres = genre;
+            if (castId) params.with_cast = String(castId);
             if (directorId) params.with_crew = String(directorId);
             data = await tmdbFetch("/discover/movie", params);
 
